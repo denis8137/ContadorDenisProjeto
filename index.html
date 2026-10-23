@@ -1,161 +1,392 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contar Alunos por Escola - Edital</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background: #0f172a;
-    color: #e2e8f0;
-    min-height: 100vh;
-    padding: 32px 16px;
-  }
-  .container { max-width: 1020px; margin: 0 auto; }
-  h1 { font-size: 1.7rem; font-weight: 700; text-align: center; }
-  h1 span { color: #34d399; }
-  .sub { text-align: center; color: #94a3b8; margin: 8px 0 28px; font-size: .95rem; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analisador de Ensalamento por Escola</title>
+  
+  <!-- Carregamento direto da nuvem oficial (Não precisa da pasta lib) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #151d30;
+      --border: #243049;
+      --text: #f8fafc;
+      --subtext: #94a3b8;
+      --accent: #38bdf8;
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --success: #10b981;
+      --gold: #f59e0b;
+    }
 
-  .dropzone {
-    border: 2px dashed #334155;
-    border-radius: 14px;
-    padding: 48px 24px;
-    text-align: center;
-    cursor: pointer;
-    transition: .15s;
-    background: #1e293b;
-  }
-  .dropzone:hover, .dropzone.over { border-color: #34d399; background: #1a2e28; }
-  .dropzone .icone { font-size: 2.6rem; }
-  .dropzone p { margin-top: 12px; color: #cbd5e1; }
-  .dropzone small { color: #64748b; display: block; margin-top: 6px; }
-  #arquivo { display: none; }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 30px 15px; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 1200px; background-color: var(--card); border-radius: 16px; padding: 32px; box-shadow: 0 12px 40px rgba(0,0,0,0.6); border: 1px solid var(--border); }
+    
+    h1 { font-size: 1.7rem; color: var(--accent); margin-bottom: 6px; }
+    p.desc { color: var(--subtext); margin-bottom: 24px; font-size: 0.95rem; }
 
-  .progresso {
-    display: none;
-    margin-top: 24px;
-    background: #1e293b;
-    border-radius: 12px;
-    padding: 20px;
-    text-align: center;
-  }
-  .progresso.ativo { display: block; }
-  .barra-fundo { height: 10px; background: #334155; border-radius: 5px; margin-top: 12px; overflow: hidden; }
-  .barra { height: 100%; width: 0%; background: linear-gradient(90deg, #10b981, #34d399); border-radius: 5px; transition: width .2s; }
+    /* Área de Upload com clique 100% garantido */
+    .upload-card {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      background: rgba(11, 15, 25, 0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+    }
+    .upload-card:hover { border-color: var(--accent); background: rgba(11, 15, 25, 0.9); }
+    .upload-icon { font-size: 3rem; }
 
-  .resumo { display: none; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 26px; }
-  .resumo.ativo { display: grid; }
-  .card { background: #1e293b; border-radius: 12px; padding: 18px; text-align: center; }
-  .card .valor { font-size: 1.9rem; font-weight: 700; color: #34d399; }
-  .card .rotulo { color: #94a3b8; font-size: .85rem; margin-top: 4px; }
+    .btn-choose {
+      background: var(--primary);
+      color: #fff;
+      padding: 13px 28px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+    .btn-choose:hover { background: var(--primary-hover); }
+    .file-name { font-weight: 600; color: var(--accent); font-size: 0.95rem; margin-top: 4px; }
 
-  .ferramentas { display: none; justify-content: space-between; align-items: center; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
-  .ferramentas.ativo { display: flex; }
-  #busca {
-    flex: 1; min-width: 220px; padding: 10px 14px; border-radius: 10px;
-    border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: .95rem;
-  }
-  #busca:focus { outline: none; border-color: #34d399; }
-  .botoes { display: flex; gap: 10px; }
-  button {
-    padding: 10px 16px; border: none; border-radius: 10px; cursor: pointer;
-    font-size: .9rem; font-weight: 600; transition: .15s;
-  }
-  .btn-verde { background: #10b981; color: #052e1c; }
-  .btn-verde:hover { background: #34d399; }
-  .btn-claro { background: #334155; color: #e2e8f0; }
-  .btn-claro:hover { background: #475569; }
+    /* Barra de Progresso */
+    .progress-box { display: none; margin-top: 24px; background: #0b0f19; border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+    .status-text { display: flex; justify-content: space-between; font-size: 0.88rem; color: #cbd5e1; font-weight: 500; }
+    .progress-bar-bg { width: 100%; background: #243049; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 10px; }
+    .progress-bar { width: 0%; height: 100%; background: var(--accent); transition: width 0.1s linear; }
 
-  .tabela-caixa { display: none; margin-top: 18px; background: #1e293b; border-radius: 12px; overflow: hidden; }
-  .tabela-caixa.ativo { display: block; }
-  table { width: 100%; border-collapse: collapse; }
-  th {
-    text-align: left; padding: 13px 16px; background: #0f172a; color: #94a3b8;
-    font-size: .78rem; text-transform: uppercase; letter-spacing: .06em;
-    position: sticky; top: 0;
-  }
-  th.dir, td.dir { text-align: right; }
-  td { padding: 12px 16px; border-top: 1px solid #263349; font-size: .93rem; vertical-align: middle; }
-  tr:hover td { background: #24334a; }
-  .pos { color: #64748b; width: 42px; }
-  .qtd { font-weight: 700; color: #34d399; white-space: nowrap; }
-  .barra-cel { width: 34%; }
-  .mini-barra { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
-  .mini-barra > div { height: 100%; background: #10b981; border-radius: 4px; }
-  .periodo-tag { color: #94a3b8; font-size: .78rem; display: block; margin-top: 2px; }
+    /* Resultados */
+    .results-area { display: none; margin-top: 32px; }
+    
+    .filter-panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      background: #0b0f19;
+      padding: 18px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+      align-items: flex-end;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 6px; min-width: 180px; flex: 1; }
+    .filter-group label { font-size: 0.78rem; font-weight: 700; color: var(--subtext); text-transform: uppercase; }
+    .filter-group select, .filter-group input {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    .filter-group select:focus, .filter-group input:focus { border-color: var(--accent); }
 
-  .erro {
-    display: none; margin-top: 20px; background: #3f1d1d; border: 1px solid #7f1d1d;
-    color: #fca5a5; padding: 14px 18px; border-radius: 12px; font-size: .92rem;
-  }
-  .erro.ativo { display: block; }
+    .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+    .btn-export { background: var(--success); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
+    .btn-export:hover { opacity: 0.9; }
 
-  footer { text-align: center; color: #475569; font-size: .8rem; margin-top: 40px; }
-
-  @media print {
-    body { background: #fff; color: #000; padding: 0; }
-    .dropzone, .ferramentas, footer, h1, .sub { display: none !important; }
-    .card { border: 1px solid #ccc; }
-    .card .valor { color: #000; }
-    .tabela-caixa { background: #fff; }
-    td, th { color: #000; background: #fff !important; border-color: #ccc; }
-    .qtd { color: #000; }
-    .mini-barra { display: none; }
-  }
-</style>
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+    th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: #0b0f19; color: var(--subtext); font-weight: 700; text-transform: uppercase; font-size: 0.78rem; }
+    tr:hover { background: rgba(255,255,255,0.02); }
+    .rank { color: var(--gold); font-weight: bold; width: 45px; }
+    .badge { padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; display: inline-block; }
+    .badge-manha { background: #1e3a5f; color: #60a5fa; }
+    .badge-tarde { background: #3b2d18; color: #fbbf24; }
+    .badge-geral { background: #243049; color: #cbd5e1; }
+    .total-col { font-weight: 800; font-size: 1.15rem; color: var(--accent); text-align: right; }
+    th.right { text-align: right; }
+    .empty-row { text-align: center; color: var(--subtext); padding: 35px; }
+  </style>
 </head>
 <body>
-<div class="container">
-  <h1>Contar Alunos por <span>Escola</span></h1>
-  <p class="sub">Selecione o PDF do edital e veja quantos alunos têm em cada local de prova.<br>Nada é enviado para a internet — tudo acontece no seu computador.</p>
 
-  <div class="dropzone" id="dropzone">
-    <div class="icone">📄</div>
-    <p><strong>Arraste o PDF aqui</strong> ou clique para escolher</p>
-    <small>Edital com lista de candidatos e locais de prova</small>
-    <input type="file" id="arquivo" accept="application/pdf,.pdf">
-  </div>
+  <div class="container">
+    <h1>Analisador de Ensalamento por Escola</h1>
+    <p class="desc">Carregue qualquer edital em PDF para consolidar e ranquear automaticamente os locais de prova e escolas com mais alunos.</p>
 
-  <div class="progresso" id="progresso">
-    <div id="progressoTexto">Lendo o PDF...</div>
-    <div class="barra-fundo"><div class="barra" id="barra"></div></div>
-  </div>
+    <!-- Área de Seleção Confiável -->
+    <div class="upload-card" id="cardUpload">
+      <span class="upload-icon">📂</span>
+      <button type="button" class="btn-choose" id="btnClick">Clique Aqui para Escolher o Arquivo PDF</button>
+      <input type="file" id="pdfFileInput" accept="application/pdf" style="display: none;">
+      <div class="file-name" id="fileNameDisplay">Nenhum arquivo selecionado</div>
+    </div>
 
-  <div class="erro" id="erro"></div>
+    <!-- Barra de Progresso -->
+    <div class="progress-box" id="progressBox">
+      <div class="status-text">
+        <span id="statusLabel">Aguardando...</span>
+        <span id="percentLabel">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
 
-  <div class="resumo" id="resumo">
-    <div class="card"><div class="valor" id="totalAlunos">0</div><div class="rotulo">alunos (inscrições)</div></div>
-    <div class="card"><div class="valor" id="totalLocais">0</div><div class="rotulo">locais de prova</div></div>
-    <div class="card"><div class="valor" id="maiorLocal">-</div><div class="rotulo">escola com mais alunos</div></div>
-  </div>
+    <!-- Tabela e Filtros -->
+    <div class="results-area" id="resultsArea">
+      <div class="filter-panel">
+        <div class="filter-group">
+          <label for="filtroPeriodo">Período</label>
+          <select id="filtroPeriodo">
+            <option value="TODOS">Todos os Períodos</option>
+            <option value="Manhã">Manhã</option>
+            <option value="Tarde">Tarde</option>
+          </select>
+        </div>
 
-  <div class="ferramentas" id="ferramentas">
-    <input type="text" id="busca" placeholder="Filtrar escola pelo nome...">
-    <div class="botoes">
-      <button class="btn-claro" id="btnCsv">Baixar CSV</button>
-      <button class="btn-claro" id="btnImprimir">Imprimir</button>
-      <button class="btn-verde" id="btnNovo">Outro PDF</button>
+        <div class="filter-group" style="flex: 2;">
+          <label for="filtroBusca">Pesquisar Escola ou Bloco</label>
+          <input type="text" id="filtroBusca" placeholder="Filtrar por nome de escola, rua ou bloco...">
+        </div>
+      </div>
+
+      <div class="results-header">
+        <div>
+          <h2>Ranking Consolidado</h2>
+          <span id="totalResumo" style="color: var(--subtext); font-size: 0.9rem;"></span>
+        </div>
+        <button class="btn-export" id="exportBtn">📥 Baixar Planilha (CSV)</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Período</th>
+            <th>Local de Prova / Escola / Bloco</th>
+            <th class="right">Total Alunos</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
     </div>
   </div>
 
-  <div class="tabela-caixa" id="tabelaCaixa">
-    <table>
-      <thead>
-        <tr><th>#</th><th>Local de prova</th><th class="dir">Alunos</th><th class="barra-cel"></th></tr>
-      </thead>
-      <tbody id="corpo"></tbody>
-    </table>
-  </div>
+  <script>
+    // Configura o worker diretamente da CDN oficial da Mozilla
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-  <footer>Funciona offline · Seu PDF não sai do computador</footer>
-</div>
+    const pdfFileInput = document.getElementById('pdfFileInput');
+    const btnClick = document.getElementById('btnClick');
+    const cardUpload = document.getElementById('cardUpload');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const progressBox = document.getElementById('progressBox');
+    const progressBar = document.getElementById('progressBar');
+    const statusLabel = document.getElementById('statusLabel');
+    const percentLabel = document.getElementById('percentLabel');
+    const resultsArea = document.getElementById('resultsArea');
+    const tableBody = document.getElementById('tableBody');
+    const totalResumo = document.getElementById('totalResumo');
+    const exportBtn = document.getElementById('exportBtn');
+    const filtroPeriodo = document.getElementById('filtroPeriodo');
+    const filtroBusca = document.getElementById('filtroBusca');
 
-<script src="lib/pdf.min.js"></script>
-<script src="extrair.js"></script>
-<script src="parser.js"></script>
-<script src="app.js"></script>
+    let dadosGerais = [];
+
+    // Dispara a janela nativa de arquivos com 100% de precisão ao clicar em qualquer lugar do botão ou card
+    btnClick.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pdfFileInput.click();
+    });
+
+    cardUpload.addEventListener('click', () => {
+      pdfFileInput.click();
+    });
+
+    // Suporte para arrastar e soltar (Drag and Drop)
+    cardUpload.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      cardUpload.style.borderColor = 'var(--accent)';
+    });
+    cardUpload.addEventListener('dragleave', () => {
+      cardUpload.style.borderColor = 'var(--border)';
+    });
+    cardUpload.addEventListener('drop', (e) => {
+      e.preventDefault();
+      cardUpload.style.borderColor = 'var(--border)';
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        processarArquivo(e.dataTransfer.files[0]);
+      }
+    });
+
+    pdfFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        processarArquivo(e.target.files[0]);
+      }
+    });
+
+    function normalizar(str) {
+      if (!str) return "";
+      return str
+        .replace(/MANH[√\u221A]/gi, 'MANHÃ')
+        .replace(/[√\u221A]/g, 'Ã')
+        .replace(/[∫\u222B]/g, 'º')
+        .replace(/[«\u00AB]/g, 'Ç')
+        .replace(/[⁄\u2044]/g, 'Ú')
+        .replace(/[Õ\u00D5]/g, 'Í')
+        .replace(/[”\u201D]/g, 'Ó')
+        .replace(/[’\u2019]/g, 'Ô')
+        .replace(/[£\u00A3]/g, 'Á')
+        .replace(/[–—]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    async function processarArquivo(file) {
+      fileNameDisplay.innerText = `${file.name} (${(file.size / (1024*1024)).toFixed(1)} MB)`;
+      progressBox.style.display = "block";
+      resultsArea.style.display = "none";
+      progressBar.style.width = "0%";
+      percentLabel.innerText = "0%";
+      statusLabel.innerText = "Carregando PDF...";
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({
+          data: arrayBuffer,
+          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true,
+        });
+
+        const pdf = await loadingTask.promise;
+        const totalPages = pdf.numPages;
+
+        const contagem = {};
+
+        // Regex inteligente que captura o padrão de ensalamento sem apagar números de bloco
+        const regexUniversal = /(?:(?:[MT\d]{1,4}\s*[-–]\s*|(?:EE|EMEF|UME|COLÉGIO|COLEGIO|FACULDADE|UNIVERSIDADE|UNIP|UNISANTA|UNISANTOS|UNIMONTE|UNIFESP|ESAMC|UNIMES|CAMPUS)\b)[^,\n\r]+?)(?=\s*[-–]\s*(?:MANHÃ|TARDE)|\s*(?:1[º°]|2[º°]|3[º°]|4[º°]|5[º°])?\s*ANDAR|\s*SALA|\s*\d{4,5}|$)/gi;
+
+        for (let i = 1; i <= totalPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          let pageText = normalizar(content.items.map(it => it.str).join(' '));
+
+          let match;
+          while ((match = regexUniversal.exec(pageText)) !== null) {
+            let localBruto = match[0].trim();
+            
+            // Detecta se é manhã ou tarde
+            let periodo = "Geral";
+            if (/^M/i.test(localBruto) || /MANHÃ/i.test(match[0])) periodo = "Manhã";
+            else if (/^T/i.test(localBruto) || /TARDE/i.test(match[0])) periodo = "Tarde";
+
+            // Limpa sufixos de período, mas PRESERVA os números de bloco (ex: BLOCO 7)
+            let localLimpo = localBruto
+              .replace(/\s*[-–]\s*(?:MANHÃ|TARDE)\s*\d*.*$/i, '')
+              .replace(/\s+(?:MANHÃ|TARDE)\s*\d*.*$/i, '')
+              .replace(/\s*[-–]\s*\d+\s*[º°]\s*$/i, '')
+              .replace(/[-–\s]+$/, '')
+              .trim();
+
+            if (localLimpo.length > 6 && !/LOCAL\s*(?:DA|DE)?\s*PROVA/i.test(localLimpo) && !/EDITAL/i.test(localLimpo)) {
+              const chave = `${localLimpo.toUpperCase()}___${periodo}`;
+              if (!contagem[chave]) {
+                contagem[chave] = { local: localLimpo, periodo: periodo, total: 0 };
+              }
+              contagem[chave].total++;
+            }
+          }
+
+          if (i % 8 === 0 || i === totalPages) {
+            const pct = Math.round((i / totalPages) * 100);
+            progressBar.style.width = pct + "%";
+            percentLabel.innerText = pct + "%";
+            statusLabel.innerText = `Processando página ${i} de ${totalPages}...`;
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
+
+        dadosGerais = Object.values(contagem).sort((a, b) => b.total - a.total);
+        aplicarFiltroERenderizar();
+
+      } catch (err) {
+        console.error("Erro no processamento:", err);
+        alert("Ocorreu um erro ao carregar o arquivo PDF.");
+      } finally {
+        statusLabel.innerText = "Concluído com sucesso!";
+      }
+    }
+
+    filtroPeriodo.addEventListener('change', aplicarFiltroERenderizar);
+    filtroBusca.addEventListener('input', aplicarFiltroERenderizar);
+
+    function aplicarFiltroERenderizar() {
+      const per = filtroPeriodo.value;
+      const busca = filtroBusca.value.toLowerCase().trim();
+
+      const filtrados = dadosGerais.filter(it => {
+        const matchPer = per === "TODOS" || it.periodo === per;
+        const matchBusca = busca === "" || it.local.toLowerCase().includes(busca);
+        return matchPer && matchBusca;
+      });
+
+      renderizarTabela(filtrados);
+    }
+
+    function renderizarTabela(dados) {
+      tableBody.innerHTML = "";
+      let total = 0;
+
+      if (dados.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Nenhum local reconhecido. Verifique se o documento possui texto pesquisável.</td></tr>`;
+        totalResumo.innerText = "0 locais";
+        resultsArea.style.display = "block";
+        return;
+      }
+
+      dados.forEach((item, index) => {
+        total += item.total;
+        const badgeClass = item.periodo === "Manhã" ? "badge-manha" : (item.periodo === "Tarde" ? "badge-tarde" : "badge-geral");
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="rank">#${index + 1}</td>
+          <td><span class="badge ${badgeClass}">${item.periodo}</span></td>
+          <td><strong>${item.local}</strong></td>
+          <td class="total-col">${item.total.toLocaleString('pt-BR')}</td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      totalResumo.innerText = `Total: ${total.toLocaleString('pt-BR')} alunos distribuídos em ${dados.length} locais/blocos`;
+      resultsArea.style.display = "block";
+    }
+
+    exportBtn.addEventListener('click', () => {
+      const per = filtroPeriodo.value;
+      const busca = filtroBusca.value.toLowerCase().trim();
+      const dados = dadosGerais.filter(it => (per === "TODOS" || it.periodo === per) && (busca === "" || it.local.toLowerCase().includes(busca)));
+
+      if (dados.length === 0) return;
+
+      let csv = "\uFEFFPosição;Período;Escola / Bloco;Total de Alunos\n";
+      dados.forEach((item, i) => {
+        csv += `${i + 1};${item.periodo};"${item.local.replace(/"/g, '""')}";${item.total}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `relatorio_ensalamento.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  </script>
 </body>
 </html>
