@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Analisador de Ensalamento por Escola</title>
+  <title>Analisador de Ensalamento por Escola e Sala</title>
   
-  <!-- Carregamento direto da nuvem oficial (Não precisa da pasta lib) -->
+  <!-- CDN oficial da Mozilla -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   
   <style>
@@ -24,12 +24,11 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background-color: var(--bg); color: var(--text); padding: 30px 15px; display: flex; justify-content: center; }
-    .container { width: 100%; max-width: 1200px; background-color: var(--card); border-radius: 16px; padding: 32px; box-shadow: 0 12px 40px rgba(0,0,0,0.6); border: 1px solid var(--border); }
+    .container { width: 100%; max-width: 1250px; background-color: var(--card); border-radius: 16px; padding: 32px; box-shadow: 0 12px 40px rgba(0,0,0,0.6); border: 1px solid var(--border); }
     
     h1 { font-size: 1.7rem; color: var(--accent); margin-bottom: 6px; }
     p.desc { color: var(--subtext); margin-bottom: 24px; font-size: 0.95rem; }
 
-    /* Área de Upload com clique 100% garantido */
     .upload-card {
       border: 2px dashed var(--border);
       border-radius: 12px;
@@ -60,13 +59,11 @@
     .btn-choose:hover { background: var(--primary-hover); }
     .file-name { font-weight: 600; color: var(--accent); font-size: 0.95rem; margin-top: 4px; }
 
-    /* Barra de Progresso */
     .progress-box { display: none; margin-top: 24px; background: #0b0f19; border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
     .status-text { display: flex; justify-content: space-between; font-size: 0.88rem; color: #cbd5e1; font-weight: 500; }
     .progress-bar-bg { width: 100%; background: #243049; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 10px; }
     .progress-bar { width: 0%; height: 100%; background: var(--accent); transition: width 0.1s linear; }
 
-    /* Resultados */
     .results-area { display: none; margin-top: 32px; }
     
     .filter-panel {
@@ -97,7 +94,7 @@
     .btn-export { background: var(--success); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
     .btn-export:hover { opacity: 0.9; }
 
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.88rem; }
     th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border); }
     th { background: #0b0f19; color: var(--subtext); font-weight: 700; text-transform: uppercase; font-size: 0.78rem; }
     tr:hover { background: rgba(255,255,255,0.02); }
@@ -114,10 +111,10 @@
 <body>
 
   <div class="container">
-    <h1>Analisador de Ensalamento por Escola</h1>
-    <p class="desc">Carregue qualquer edital em PDF para consolidar e ranquear automaticamente os locais de prova e escolas com mais alunos.</p>
+    <h1>Analisador de Ensalamento Completo</h1>
+    <p class="desc">Apresenta a descrição completa do local de prova (código, escola, bloco, andar e sala) com a quantidade de alunos alocados.</p>
 
-    <!-- Área de Seleção Confiável -->
+    <!-- Área de Upload -->
     <div class="upload-card" id="cardUpload">
       <span class="upload-icon">📂</span>
       <button type="button" class="btn-choose" id="btnClick">Clique Aqui para Escolher o Arquivo PDF</button>
@@ -149,17 +146,17 @@
         </div>
 
         <div class="filter-group" style="flex: 2;">
-          <label for="filtroBusca">Pesquisar Escola ou Bloco</label>
-          <input type="text" id="filtroBusca" placeholder="Filtrar por nome de escola, rua ou bloco...">
+          <label for="filtroBusca">Pesquisar por Escola, Sala ou Andar</label>
+          <input type="text" id="filtroBusca" placeholder="Ex: Maria Expedita, Sala 02, 1º Andar...">
         </div>
       </div>
 
       <div class="results-header">
         <div>
-          <h2>Ranking Consolidado</h2>
+          <h2>Locais e Salas Encontrados</h2>
           <span id="totalResumo" style="color: var(--subtext); font-size: 0.9rem;"></span>
         </div>
-        <button class="btn-export" id="exportBtn">📥 Baixar Planilha (CSV)</button>
+        <button class="btn-export" id="exportBtn">📥 Baixar Planilha Completa (CSV)</button>
       </div>
 
       <table>
@@ -167,7 +164,7 @@
           <tr>
             <th>#</th>
             <th>Período</th>
-            <th>Local de Prova / Escola / Bloco</th>
+            <th>Local de Prova Completo (Escola, Andar e Sala)</th>
             <th class="right">Total Alunos</th>
           </tr>
         </thead>
@@ -177,7 +174,6 @@
   </div>
 
   <script>
-    // Configura o worker diretamente da CDN oficial da Mozilla
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
     const pdfFileInput = document.getElementById('pdfFileInput');
@@ -197,7 +193,6 @@
 
     let dadosGerais = [];
 
-    // Dispara a janela nativa de arquivos com 100% de precisão ao clicar em qualquer lugar do botão ou card
     btnClick.addEventListener('click', (e) => {
       e.stopPropagation();
       pdfFileInput.click();
@@ -207,7 +202,6 @@
       pdfFileInput.click();
     });
 
-    // Suporte para arrastar e soltar (Drag and Drop)
     cardUpload.addEventListener('dragover', (e) => {
       e.preventDefault();
       cardUpload.style.borderColor = 'var(--accent)';
@@ -267,8 +261,10 @@
 
         const contagem = {};
 
-        // Regex inteligente que captura o padrão de ensalamento sem apagar números de bloco
-        const regexUniversal = /(?:(?:[MT\d]{1,4}\s*[-–]\s*|(?:EE|EMEF|UME|COLÉGIO|COLEGIO|FACULDADE|UNIVERSIDADE|UNIP|UNISANTA|UNISANTOS|UNIMONTE|UNIFESP|ESAMC|UNIMES|CAMPUS)\b)[^,\n\r]+?)(?=\s*[-–]\s*(?:MANHÃ|TARDE)|\s*(?:1[º°]|2[º°]|3[º°]|4[º°]|5[º°])?\s*ANDAR|\s*SALA|\s*\d{4,5}|$)/gi;
+        // REGEX COMPLETA:
+        // Captura desde o código do local (M-130, T-420, etc.) ou nome da escola,
+        // passando pelo período e andar, até o final da indicação da SALA (ex.: SALA 02, SALA 127)
+        const regexCompleta = /(?:(?:[MT\d]{1,4}\s*[-–]\s*|(?:EE|E\.E\.|EMEF|E\.M\.E\.F\.|UME|U\.M\.E\.|COLÉGIO|COLEGIO|FACULDADE|UNIVERSIDADE|UNIP|UNISANTA|UNISANTOS|UNIMONTE|UNIFESP|ESAMC|UNIMES|CAMPUS)\b)[^,\n\r]+?\s*SALA\s*[A-Z0-9\.\-]+)/gi;
 
         for (let i = 1; i <= totalPages; i++) {
           const page = await pdf.getPage(i);
@@ -276,26 +272,27 @@
           let pageText = normalizar(content.items.map(it => it.str).join(' '));
 
           let match;
-          while ((match = regexUniversal.exec(pageText)) !== null) {
-            let localBruto = match[0].trim();
-            
-            // Detecta se é manhã ou tarde
-            let periodo = "Geral";
-            if (/^M/i.test(localBruto) || /MANHÃ/i.test(match[0])) periodo = "Manhã";
-            else if (/^T/i.test(localBruto) || /TARDE/i.test(match[0])) periodo = "Tarde";
+          while ((match = regexCompleta.exec(pageText)) !== null) {
+            let localCompleto = match[0].trim();
 
-            // Limpa sufixos de período, mas PRESERVA os números de bloco (ex: BLOCO 7)
-            let localLimpo = localBruto
-              .replace(/\s*[-–]\s*(?:MANHÃ|TARDE)\s*\d*.*$/i, '')
-              .replace(/\s+(?:MANHÃ|TARDE)\s*\d*.*$/i, '')
-              .replace(/\s*[-–]\s*\d+\s*[º°]\s*$/i, '')
-              .replace(/[-–\s]+$/, '')
+            // Identifica o período
+            let periodo = "Geral";
+            if (/MANHÃ|\bM\b|\bM-?\d{2,4}\b/i.test(localCompleto)) {
+              periodo = "Manhã";
+            } else if (/TARDE|\bT\b|\bT-?\d{2,4}\b/i.test(localCompleto)) {
+              periodo = "Tarde";
+            }
+
+            // Normaliza espaçamento antes de pontuações
+            localCompleto = localCompleto
+              .replace(/\s*-\s*/g, ' - ')
+              .replace(/\s+/g, ' ')
               .trim();
 
-            if (localLimpo.length > 6 && !/LOCAL\s*(?:DA|DE)?\s*PROVA/i.test(localLimpo) && !/EDITAL/i.test(localLimpo)) {
-              const chave = `${localLimpo.toUpperCase()}___${periodo}`;
+            if (localCompleto.length > 10 && !/LOCAL\s*(?:DA|DE)?\s*PROVA/i.test(localCompleto) && !/EDITAL/i.test(localCompleto)) {
+              const chave = `${localCompleto.toUpperCase()}___${periodo}`;
               if (!contagem[chave]) {
-                contagem[chave] = { local: localLimpo, periodo: periodo, total: 0 };
+                contagem[chave] = { local: localCompleto, periodo: periodo, total: 0 };
               }
               contagem[chave].total++;
             }
@@ -342,7 +339,7 @@
       let total = 0;
 
       if (dados.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Nenhum local reconhecido. Verifique se o documento possui texto pesquisável.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Nenhum local com sala reconhecido. Verifique se o arquivo possui texto selecionável.</td></tr>`;
         totalResumo.innerText = "0 locais";
         resultsArea.style.display = "block";
         return;
@@ -362,7 +359,7 @@
         tableBody.appendChild(tr);
       });
 
-      totalResumo.innerText = `Total: ${total.toLocaleString('pt-BR')} alunos distribuídos em ${dados.length} locais/blocos`;
+      totalResumo.innerText = `Total: ${total.toLocaleString('pt-BR')} alunos distribuídos em ${dados.length} salas/locais`;
       resultsArea.style.display = "block";
     }
 
@@ -373,7 +370,7 @@
 
       if (dados.length === 0) return;
 
-      let csv = "\uFEFFPosição;Período;Escola / Bloco;Total de Alunos\n";
+      let csv = "\uFEFFPosição;Período;Local de Prova Completo;Total de Alunos\n";
       dados.forEach((item, i) => {
         csv += `${i + 1};${item.periodo};"${item.local.replace(/"/g, '""')}";${item.total}\n`;
       });
@@ -382,7 +379,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `relatorio_ensalamento.csv`;
+      a.download = `relatorio_ensalamento_completo.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
