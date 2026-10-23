@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contar Alunos por Escola - Edital</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%84%3C/text%3E%3C/svg%3E">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+  .container { max-width: 1020px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; font-weight: 700; text-align: center; }
+  h1 span { color: #34d399; }
+  .sub { text-align: center; color: #94a3b8; margin: 8px 0 28px; font-size: .95rem; }
+
+  .dropzone {
+    border: 2px dashed #334155;
+    border-radius: 14px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: .15s;
+    background: #1e293b;
+  }
+  .dropzone:hover, .dropzone.over { border-color: #34d399; background: #1a2e28; }
+  .dropzone .icone { font-size: 2.6rem; }
+  .dropzone p { margin-top: 12px; color: #cbd5e1; }
+  .dropzone small { color: #64748b; display: block; margin-top: 6px; }
+  #arquivo { display: none; }
+
+  .progresso {
+    display: none;
+    margin-top: 24px;
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+  .progresso.ativo { display: block; }
+  .barra-fundo { height: 10px; background: #334155; border-radius: 5px; margin-top: 12px; overflow: hidden; }
+  .barra { height: 100%; width: 0%; background: linear-gradient(90deg, #10b981, #34d399); border-radius: 5px; transition: width .2s; }
+
+  .resumo { display: none; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 26px; }
+  .resumo.ativo { display: grid; }
+  .card { background: #1e293b; border-radius: 12px; padding: 18px; text-align: center; }
+  .card .valor { font-size: 1.9rem; font-weight: 700; color: #34d399; }
+  .card .rotulo { color: #94a3b8; font-size: .85rem; margin-top: 4px; }
+
+  .ferramentas { display: none; justify-content: space-between; align-items: center; gap: 12px; margin-top: 26px; flex-wrap: wrap; }
+  .ferramentas.ativo { display: flex; }
+  #busca {
+    flex: 1; min-width: 220px; padding: 10px 14px; border-radius: 10px;
+    border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: .95rem;
+  }
+  #busca:focus { outline: none; border-color: #34d399; }
+  .botoes { display: flex; gap: 10px; }
+  button {
+    padding: 10px 16px; border: none; border-radius: 10px; cursor: pointer;
+    font-size: .9rem; font-weight: 600; transition: .15s;
+  }
+  .btn-verde { background: #10b981; color: #052e1c; }
+  .btn-verde:hover { background: #34d399; }
+  .btn-claro { background: #334155; color: #e2e8f0; }
+  .btn-claro:hover { background: #475569; }
+
+  .tabela-caixa { display: none; margin-top: 18px; background: #1e293b; border-radius: 12px; overflow: hidden; }
+  .tabela-caixa.ativo { display: block; }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; padding: 13px 16px; background: #0f172a; color: #94a3b8;
+    font-size: .78rem; text-transform: uppercase; letter-spacing: .06em;
+    position: sticky; top: 0;
+  }
+  th.dir, td.dir { text-align: right; }
+  td { padding: 12px 16px; border-top: 1px solid #263349; font-size: .93rem; vertical-align: middle; }
+  tr:hover td { background: #24334a; }
+  .pos { color: #64748b; width: 42px; }
+  .qtd { font-weight: 700; color: #34d399; white-space: nowrap; }
+  .barra-cel { width: 34%; }
+  .mini-barra { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
+  .mini-barra > div { height: 100%; background: #10b981; border-radius: 4px; }
+  .periodo-tag { color: #94a3b8; font-size: .78rem; display: block; margin-top: 2px; }
+
+  .erro {
+    display: none; margin-top: 20px; background: #3f1d1d; border: 1px solid #7f1d1d;
+    color: #fca5a5; padding: 14px 18px; border-radius: 12px; font-size: .92rem;
+  }
+  .erro.ativo { display: block; }
+
+  footer { text-align: center; color: #475569; font-size: .8rem; margin-top: 40px; }
+
+  @media print {
+    body { background: #fff; color: #000; padding: 0; }
+    .dropzone, .ferramentas, footer, h1, .sub { display: none !important; }
+    .card { border: 1px solid #ccc; }
+    .card .valor { color: #000; }
+    .tabela-caixa { background: #fff; }
+    td, th { color: #000; background: #fff !important; border-color: #ccc; }
+    .qtd { color: #000; }
+    .mini-barra { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Contar Alunos por <span>Escola</span></h1>
+  <p class="sub">Selecione o PDF do edital e veja quantos alunos têm em cada local de prova.<br>Nada é enviado para a internet — tudo acontece no seu computador.</p>
+
+  <div class="dropzone" id="dropzone">
+    <div class="icone">📄</div>
+    <p><strong>Arraste o PDF aqui</strong> ou clique para escolher</p>
+    <small>Edital com lista de candidatos e locais de prova</small>
+    <input type="file" id="arquivo" accept="application/pdf,.pdf">
+  </div>
+
+  <div class="progresso" id="progresso">
+    <div id="progressoTexto">Lendo o PDF...</div>
+    <div class="barra-fundo"><div class="barra" id="barra"></div></div>
+  </div>
+
+  <div class="erro" id="erro"></div>
+
+  <div class="resumo" id="resumo">
+    <div class="card"><div class="valor" id="totalAlunos">0</div><div class="rotulo">alunos (inscrições)</div></div>
+    <div class="card"><div class="valor" id="totalLocais">0</div><div class="rotulo">locais de prova</div></div>
+    <div class="card"><div class="valor" id="maiorLocal">-</div><div class="rotulo">escola com mais alunos</div></div>
+  </div>
+
+  <div class="ferramentas" id="ferramentas">
+    <input type="text" id="busca" placeholder="Filtrar escola pelo nome...">
+    <div class="botoes">
+      <button class="btn-claro" id="btnCsv">Baixar CSV</button>
+      <button class="btn-claro" id="btnImprimir">Imprimir</button>
+      <button class="btn-verde" id="btnNovo">Outro PDF</button>
+    </div>
+  </div>
+
+  <div class="tabela-caixa" id="tabelaCaixa">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Local de prova</th><th class="dir">Alunos</th><th class="barra-cel"></th></tr>
+      </thead>
+      <tbody id="corpo"></tbody>
+    </table>
+  </div>
+
+  <footer>Funciona offline · Seu PDF não sai do computador</footer>
+</div>
+
+<script src="lib/pdf.min.js"></script>
+<script src="extrair.js"></script>
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
