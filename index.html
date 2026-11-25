@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Analisador de Ensalamento por Escola e Sala</title>
+  <title>Analisador de Ensalamento Consolidado por Escola</title>
   
   <!-- Leitor de PDF (Mozilla PDF.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -119,8 +119,8 @@
 <body>
 
   <div class="container">
-    <h1>Analisador de Ensalamento Completo</h1>
-    <p class="desc">Apresenta a descrição completa do local de prova (código, escola, bloco, andar e sala) com a quantidade de alunos alocados e exportação em CSV e PDF.</p>
+    <h1>Analisador de Ensalamento Consolidado por Escola</h1>
+    <p class="desc">Soma automaticamente todas as salas e andares de cada escola/bloco por período, exibindo o ranking geral com exportação em CSV e PDF.</p>
 
     <!-- Área de Upload -->
     <div class="upload-card" id="cardUpload">
@@ -154,14 +154,14 @@
         </div>
 
         <div class="filter-group" style="flex: 2;">
-          <label for="filtroBusca">Pesquisar por Escola, Sala ou Andar</label>
-          <input type="text" id="filtroBusca" placeholder="Ex: Maria Expedita, Sala 02, 1º Andar...">
+          <label for="filtroBusca">Pesquisar por Escola ou Bloco</label>
+          <input type="text" id="filtroBusca" placeholder="Ex: Maria Expedita, Unip, Bloco 7...">
         </div>
       </div>
 
       <div class="results-header">
         <div>
-          <h2>Locais e Salas Encontrados</h2>
+          <h2>Ranking Consolidado por Escola</h2>
           <span id="totalResumo" style="color: var(--subtext); font-size: 0.9rem;"></span>
         </div>
         <div class="export-buttons">
@@ -175,7 +175,7 @@
           <tr>
             <th>#</th>
             <th>Período</th>
-            <th>Local de Prova Completo (Escola, Andar e Sala)</th>
+            <th>Escola / Faculdade / Bloco</th>
             <th class="right">Total Alunos</th>
           </tr>
         </thead>
@@ -275,6 +275,7 @@
 
         const contagem = {};
 
+        // Captura toda a linha de ensalamento até a sala para garantir a leitura completa antes de consolidar
         const regexCompleta = /(?:(?:[MT\d]{1,4}\s*[-–]\s*|(?:EE|E\.E\.|EMEF|E\.M\.E\.F\.|UME|U\.M\.E\.|COLÉGIO|COLEGIO|FACULDADE|UNIVERSIDADE|UNIP|UNISANTA|UNISANTOS|UNIMONTE|UNIFESP|ESAMC|UNIMES|CAMPUS)\b)[^,\n\r]+?\s*SALA\s*[A-Z0-9\.\-]+)/gi;
 
         for (let i = 1; i <= totalPages; i++) {
@@ -284,24 +285,35 @@
 
           let match;
           while ((match = regexCompleta.exec(pageText)) !== null) {
-            let localCompleto = match[0].trim();
+            let linhaBruta = match[0].trim();
 
+            // 1. Identifica o período
             let periodo = "Geral";
-            if (/MANHÃ|\bM\b|\bM-?\d{2,4}\b/i.test(localCompleto)) {
+            if (/MANHÃ|\bM\b|\bM-?\d{2,4}\b/i.test(linhaBruta)) {
               periodo = "Manhã";
-            } else if (/TARDE|\bT\b|\bT-?\d{2,4}\b/i.test(localCompleto)) {
+            } else if (/TARDE|\bT\b|\bT-?\d{2,4}\b/i.test(linhaBruta)) {
               periodo = "Tarde";
             }
 
-            localCompleto = localCompleto
+            // 2. Consolida por Escola/Bloco removendo sufixos de período, andar e sala
+            // Ex: "M-130 - E.E. PROFESSORA MARIA EXPEDITA SILVA - M 1º ANDAR - SALA 02"
+            // vira -> "M-130 - E.E. PROFESSORA MARIA EXPEDITA SILVA"
+            let escolaConsolidada = linhaBruta
+              .replace(/\s*[-–]\s*(?:MANHÃ|TARDE|[MT])\s*(?:\d+\s*[º°]?\s*)?(?:ANDAR\s*)?[-–]?\s*SALA\s*.*$/i, '')
+              .replace(/\s+(?:MANHÃ|TARDE|[MT])\s*(?:\d+\s*[º°]?\s*)?(?:ANDAR\s*)?[-–]?\s*SALA\s*.*$/i, '')
+              .replace(/\s*[-–]?\s*(?:\d+\s*[º°]?\s*ANDAR|TÉRREO|TERREO)\s*[-–]?\s*SALA\s*.*$/i, '')
+              .replace(/\s*[-–]?\s*SALA\s*.*$/i, '')
+              .replace(/\s*[-–]\s*(?:MANHÃ|TARDE)\s*\d*.*$/i, '')
+              .replace(/\s*[-–]\s*[MT]\s*$/i, '')
               .replace(/\s*-\s*/g, ' - ')
+              .replace(/[-–\s]+$/, '')
               .replace(/\s+/g, ' ')
               .trim();
 
-            if (localCompleto.length > 10 && !/LOCAL\s*(?:DA|DE)?\s*PROVA/i.test(localCompleto) && !/EDITAL/i.test(localCompleto)) {
-              const chave = `${localCompleto.toUpperCase()}___${periodo}`;
+            if (escolaConsolidada.length > 6 && !/LOCAL\s*(?:DA|DE)?\s*PROVA/i.test(escolaConsolidada) && !/EDITAL/i.test(escolaConsolidada)) {
+              const chave = `${escolaConsolidada.toUpperCase()}___${periodo}`;
               if (!contagem[chave]) {
-                contagem[chave] = { local: localCompleto, periodo: periodo, total: 0 };
+                contagem[chave] = { local: escolaConsolidada, periodo: periodo, total: 0 };
               }
               contagem[chave].total++;
             }
@@ -346,8 +358,8 @@
       let total = 0;
 
       if (dados.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Nenhum local com sala reconhecido. Verifique se o documento possui texto selecionável.</td></tr>`;
-        totalResumo.innerText = "0 locais";
+        tableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Nenhuma escola reconhecida. Verifique se o documento possui texto selecionável.</td></tr>`;
+        totalResumo.innerText = "0 escolas";
         resultsArea.style.display = "block";
         return;
       }
@@ -366,7 +378,7 @@
         tableBody.appendChild(tr);
       });
 
-      totalResumo.innerText = `Total: ${total.toLocaleString('pt-BR')} alunos distribuídos em ${dados.length} salas/locais`;
+      totalResumo.innerText = `Total: ${total.toLocaleString('pt-BR')} alunos distribuídos em ${dados.length} escolas/blocos`;
       resultsArea.style.display = "block";
     }
 
@@ -375,7 +387,7 @@
       const dados = obterDadosFiltrados();
       if (dados.length === 0) return;
 
-      let csv = "\uFEFFPosição;Período;Local de Prova Completo;Total de Alunos\n";
+      let csv = "\uFEFFPosição;Período;Escola / Faculdade / Bloco;Total de Alunos\n";
       dados.forEach((item, i) => {
         csv += `${i + 1};${item.periodo};"${item.local.replace(/"/g, '""')}";${item.total}\n`;
       });
@@ -384,7 +396,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `relatorio_ensalamento_${nomeArquivoAtual || 'edital'}.csv`;
+      a.download = `relatorio_escolas_${nomeArquivoAtual || 'edital'}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -402,18 +414,16 @@
       const periodoTexto = filtroPeriodo.value === "TODOS" ? "Todos os Períodos" : filtroPeriodo.value;
       const buscaTexto = filtroBusca.value.trim() ? ` | Filtro: "${filtroBusca.value.trim()}"` : "";
 
-      // Cabeçalho do PDF
       doc.setFontSize(15);
       doc.setTextColor(15, 23, 42);
-      doc.text("Relatório de Ensalamento - Distribuição de Candidatos", 14, 18);
+      doc.text("Relatório Consolidado por Escola - Distribuição de Candidatos", 14, 18);
 
       doc.setFontSize(9.5);
       doc.setTextColor(100, 116, 139);
       doc.text(`Arquivo base: ${nomeArquivoAtual || 'Documento PDF'}`, 14, 24);
       doc.text(`Período: ${periodoTexto}${buscaTexto}`, 14, 29);
-      doc.text(`Total: ${totalAlunos.toLocaleString('pt-BR')} alunos em ${dados.length} salas/locais`, 14, 34);
+      doc.text(`Total: ${totalAlunos.toLocaleString('pt-BR')} alunos em ${dados.length} escolas/blocos`, 14, 34);
 
-      // Monta as linhas da tabela
       const linhasTabela = dados.map((item, idx) => [
         `#${idx + 1}`,
         item.periodo,
@@ -423,11 +433,11 @@
 
       doc.autoTable({
         startY: 39,
-        head: [['Pos.', 'Período', 'Local de Prova / Escola / Sala', 'Alunos']],
+        head: [['Pos.', 'Período', 'Escola / Faculdade / Bloco', 'Alunos']],
         body: linhasTabela,
         theme: 'grid',
         styles: {
-          fontSize: 8,
+          fontSize: 8.5,
           cellPadding: 3,
           textColor: [30, 41, 59],
           lineColor: [203, 213, 225],
@@ -445,10 +455,9 @@
           0: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
           1: { cellWidth: 20, halign: 'center' },
           2: { cellWidth: 'auto' },
-          3: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
+          3: { cellWidth: 24, halign: 'right', fontStyle: 'bold' }
         },
         didDrawPage: function (data) {
-          // Rodapé com numeração de página
           const pageCount = doc.internal.getNumberOfPages();
           doc.setFontSize(8);
           doc.setTextColor(148, 163, 184);
@@ -460,7 +469,7 @@
         }
       });
 
-      doc.save(`relatorio_ensalamento_${nomeArquivoAtual || 'edital'}.pdf`);
+      doc.save(`relatorio_escolas_${nomeArquivoAtual || 'edital'}.pdf`);
     });
   </script>
 </body>
