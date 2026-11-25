@@ -199,7 +199,7 @@
 
         <div class="filter-group" style="flex: 2;">
           <label for="filtroBusca">Pesquisar por Escola ou Bloco</label>
-          <input type="text" id="filtroBusca" placeholder="Ex: Paulo Freire, Valdelice, Maria Expedita, Unip...">
+          <input type="text" id="filtroBusca" placeholder="Ex: Paulo Freire, Valdelice, Elza Marreiro, Paulo Chagas...">
         </div>
       </div>
 
@@ -253,7 +253,7 @@
 
     let dadosGerais = [];
     let nomeArquivoAtual = "";
-    let pdfBytesEmMemoria = null; // Guarda o PDF carregado para trocar entre Método 1 e Método 2 instantaneamente
+    let pdfBytesEmMemoria = null;
     let metodoAtual = 1;
 
     btnClick.addEventListener('click', (e) => {
@@ -317,13 +317,12 @@
       nomeArquivoAtual = file.name.replace(/\.pdf$/i, '');
       fileNameDisplay.innerText = `${file.name} (${(file.size / (1024*1024)).toFixed(1)} MB)`;
       pdfBytesEmMemoria = await file.arrayBuffer();
-      executarProcessamento(1); // Inicia sempre com a pesquisa normal
+      executarProcessamento(1);
     }
 
     async function executarProcessamento(metodo) {
       metodoAtual = metodo;
       
-      // Atualiza visual dos botões de método
       if (metodo === 1) {
         btnMetodo1.className = "btn-method active-m1";
         btnMetodo2.className = "btn-method";
@@ -340,7 +339,6 @@
       statusLabel.innerText = metodo === 1 ? "Executando Pesquisa Normal..." : "Executando Pesquisa Método 2...";
 
       try {
-        // Faz uma cópia do ArrayBuffer pois o PDF.js pode transferir/consumir o buffer original
         const bufferCopia = pdfBytesEmMemoria.slice(0);
         const loadingTask = pdfjsLib.getDocument({
           data: bufferCopia,
@@ -425,59 +423,95 @@
     }
 
     // =========================================================================
-    // MÉTODO 2: PADRÃO INEPAM / BLOCOS DE SALA (Ex: "1º Período EM... - SALA 01" + "Qtd. Candidatos: 36")
+    // MÉTODO 2: PADRÃO INEPAM / BLOCOS DE SALA (Exato sem duplicação)
     // =========================================================================
     async function processarMetodo2(pdf, totalPages) {
       const contagem = {};
-      const salasContabilizadas = new Set(); // Evita contar a mesma sala duas vezes caso o cabeçalho repita na continuação da página
 
-      // Captura cabeçalho do bloco: "1º Período - EM Professor Paulo Freire - SALA 01" (ou sem hífen)
-      const regexCabecalhoSala = /(\d+[º°]\s*Per[íi]odo)\s*[-–]?\s*([A-ZÀ-Ú0-9\s\.\-\/]+?)\s*[-–]?\s*SALA\s*(\d+[A-Z]?)/i;
-      // Captura o totalizador oficial do fim da sala: "Qtd. Candidatos: 36"
-      const regexQtdCandidatos = /Qtd\.?\s*Candidatos\s*:\s*(\d+)/i;
+      // 1. Aprende automaticamente os nomes das escolas listadas nas primeiras páginas do edital (antes da lista de inscritos)
+      const escolasDoEdital = [];
+      const regexEscolaEdital = /\b((?:E\.?M\.?E\.?F\.?|E\.?M\.?|E\.?E\.?|COLÉGIO|FACULDADE|UNIVERSIDADE|ESCOLA)\s+[A-ZÀ-Ú][A-Za-zÀ-Ú\s]{5,65}?)(?=,|\s+localizada|\s+Avenida|\s+Rua|\s+Estrada|\s+Praça|$)/g;
 
-      let periodoAtual = "";
-      let escolaAtual = "";
-      let salaAtual = "";
+      for (let p = 1; p <= Math.min(6, totalPages); p++) {
+        const pg = await pdf.getPage(p);
+        const txt = normalizar((await pg.getTextContent()).items.map(it => it.str).join(' '));
+        if (/LISTA DE INSCRITOS/i.test(txt)) break;
+
+        let m;
+        while ((m = regexEscolaEdital.exec(txt)) !== null) {
+          const nomeLimpo = m[1].trim().replace(/\s+/g, ' ');
+          // Evita duplicar a mesma escola na lista de referência
+          if (nomeLimpo.length > 8 && !escolasDoEdital.some(e => e.toUpperCase() === nomeLimpo.toUpperCase())) {
+            escolasDoEdital.push(nomeLimpo);
+          }
+        }
+      }
+
+      // 2. Varre as páginas de candidatos: toda página que tem "Qtd. Candidatos: XX" fecha exatamente uma sala
+      const regexQtd = /Qtd\.?\s*Candidatos\s*:\s*(\d+)/i;
+      const regexPeriodo = /(\d+[º°])\s*Per[íi]odo/i;
+      // Fallback caso o edital não tenha listado a escola nas primeiras páginas
+      const regexFallbackEscola = /\d+[º°]\s*Per[íi]odo\s*[-–]?\s*(.+?)\s*[-–]?\s*SALA\s*\d+/i;
+
+      let ultimoPeriodoVisto = "Geral";
+      let ultimaEscolaVista = "";
 
       for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        let pageText = normalizar(content.items.map(it => it.str).join(' '));
+        const pageText = normalizar(content.items.map(it => it.str).join(' '));
 
-        // 1. Verifica se nesta página existe a identificação de Período + Escola + Sala
-        const matchSala = pageText.match(regexCabecalhoSala);
-        if (matchSala) {
-          periodoAtual = matchSala[1].replace(/°/g, 'º').trim();
-          // Padroniza capitalização de "Período"
-          periodoAtual = periodoAtual.replace(/per[íi]odo/i, 'Período');
-          
-          escolaAtual = matchSala[2]
-            .replace(/Local\/Sala/gi, '')
-            .replace(/^[-–\s]+|[-–\s]+$/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          salaAtual = matchSala[3].trim();
+        // Ignora páginas de capa/edital antes da lista de inscritos
+        if (!/LISTA DE INSCRITOS/i.test(pageText) && !regexQtd.test(pageText)) {
+          continue;
         }
 
-        // 2. Verifica se nesta página existe o fechamento "Qtd. Candidatos: XX"
-        const matchQtd = pageText.match(regexQtdCandidatos);
-        if (matchQtd && escolaAtual && salaAtual) {
+        // Atualiza o período se aparecer nesta página
+        const matchPer = pageText.match(regexPeriodo);
+        if (matchPer) {
+          ultimoPeriodoVisto = `${matchPer[1].replace(/°/g, 'º')} Período`;
+        }
+
+        // Identifica qual escola oficial está escrita nesta página (mesmo se houver quebra de linha ou falta de hífen)
+        let escolaEncontradaNaPagina = "";
+        for (const esc of escolasDoEdital) {
+          // Cria uma busca flexível que aceita "EM" ou "E.M." e espaços variados
+          const padraoFlex = esc
+            .replace(/^E\.?M\.?\s+/i, 'E\\.?M\\.?\\s+')
+            .replace(/^E\.?E\.?\s+/i, 'E\\.?E\\.?\\s+')
+            .replace(/\s+/g, '\\s+');
+          if (new RegExp(padraoFlex, 'i').test(pageText)) {
+            escolaEncontradaNaPagina = esc;
+            break;
+          }
+        }
+
+        // Se não achou pela lista do edital, tenta extrair pelo cabeçalho da sala na página
+        if (!escolaEncontradaNaPagina) {
+          const matchFb = pageText.match(regexFallbackEscola);
+          if (matchFb) {
+            escolaEncontradaNaPagina = matchFb[1].replace(/Local\/Sala/gi, '').trim();
+          }
+        }
+
+        if (escolaEncontradaNaPagina) {
+          ultimaEscolaVista = escolaEncontradaNaPagina;
+        }
+
+        // Quando encontra "Qtd. Candidatos: XX", soma na escola e período daquela exata sala!
+        const matchQtd = pageText.match(regexQtd);
+        if (matchQtd && ultimaEscolaVista) {
           const qtd = parseInt(matchQtd[1], 10);
-          const idUnicoSala = `${periodoAtual}___${escolaAtual.toUpperCase()}___SALA_${salaAtual}`;
-
-          if (!salasContabilizadas.has(idUnicoSala) && qtd > 0) {
-            salasContabilizadas.add(idUnicoSala);
-
-            const chaveEscola = `${escolaAtual.toUpperCase()}___${periodoAtual}`;
-            if (!contagem[chaveEscola]) {
-              contagem[chaveEscola] = {
-                local: escolaAtual,
-                periodo: periodoAtual,
+          if (qtd > 0) {
+            const chave = `${ultimaEscolaVista.toUpperCase()}___${ultimoPeriodoVisto}`;
+            if (!contagem[chave]) {
+              contagem[chave] = {
+                local: ultimaEscolaVista,
+                periodo: ultimoPeriodoVisto,
                 total: 0
               };
             }
-            contagem[chaveEscola].total += qtd;
+            contagem[chave].total += qtd;
           }
         }
 
