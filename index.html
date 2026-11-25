@@ -423,96 +423,81 @@
     }
 
     // =========================================================================
-    // MÉTODO 2: PADRÃO INEPAM / BLOCOS DE SALA (Exato sem duplicação)
+    // MÉTODO 2: PADRÃO INEPAM / BLOCOS DE SALA (Contagem real candidato por candidato)
     // =========================================================================
     async function processarMetodo2(pdf, totalPages) {
       const contagem = {};
 
-      // 1. Aprende automaticamente os nomes das escolas listadas nas primeiras páginas do edital (antes da lista de inscritos)
-      const escolasDoEdital = [];
-      const regexEscolaEdital = /\b((?:E\.?M\.?E\.?F\.?|E\.?M\.?|E\.?E\.?|COLÉGIO|FACULDADE|UNIVERSIDADE|ESCOLA)\s+[A-ZÀ-Ú][A-Za-zÀ-Ú\s]{5,65}?)(?=,|\s+localizada|\s+Avenida|\s+Rua|\s+Estrada|\s+Praça|$)/g;
-
-      for (let p = 1; p <= Math.min(6, totalPages); p++) {
+      // 1. Mapeia as datas e horários de cada período nas páginas iniciais (1 a 4)
+      const infoPeriodos = {};
+      for (let p = 1; p <= Math.min(5, totalPages); p++) {
         const pg = await pdf.getPage(p);
         const txt = normalizar((await pg.getTextContent()).items.map(it => it.str).join(' '));
         if (/LISTA DE INSCRITOS/i.test(txt)) break;
 
-        let m;
-        while ((m = regexEscolaEdital.exec(txt)) !== null) {
-          const nomeLimpo = m[1].trim().replace(/\s+/g, ' ');
-          // Evita duplicar a mesma escola na lista de referência
-          if (nomeLimpo.length > 8 && !escolasDoEdital.some(e => e.toUpperCase() === nomeLimpo.toUpperCase())) {
-            escolasDoEdital.push(nomeLimpo);
-          }
+        const regexInfoPer = /(\d+[º°])\s*Per[íi]odo\s*Prova\s*dia\s*(\d{2}\/\d{2}\/\d{4})\s*[-–]\s*Fechamento\s*dos\s*port[õo]es\s*[àa]s\s*(\d{2}h\d{2})/gi;
+        let mPer;
+        while ((mPer = regexInfoPer.exec(txt)) !== null) {
+          const numPer = `${mPer[1].replace(/°/g, 'º')} Período`;
+          const dataCurta = mPer[2].slice(0, 5); // ex: 29/11
+          infoPeriodos[numPer] = `${numPer} (${dataCurta} - ${mPer[3]})`;
         }
       }
 
-      // 2. Varre as páginas de candidatos: toda página que tem "Qtd. Candidatos: XX" fecha exatamente uma sala
-      const regexQtd = /Qtd\.?\s*Candidatos\s*:\s*(\d+)/i;
+      // 2. Identifica a escola e período de cada página da lista e conta os candidatos reais (inscrição 03XXXXX)
       const regexPeriodo = /(\d+[º°])\s*Per[íi]odo/i;
-      // Fallback caso o edital não tenha listado a escola nas primeiras páginas
-      const regexFallbackEscola = /\d+[º°]\s*Per[íi]odo\s*[-–]?\s*(.+?)\s*[-–]?\s*SALA\s*\d+/i;
+      // Regex de inscrição: números de 7 dígitos começando com 0 (padrão INEPAM)
+      const regexInscricoes = /\b0\d{6}\b/g;
 
-      let ultimoPeriodoVisto = "Geral";
-      let ultimaEscolaVista = "";
+      let periodoCorrente = "";
+      let escolaCorrente = "";
 
       for (let i = 1; i <= totalPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
         const pageText = normalizar(content.items.map(it => it.str).join(' '));
 
-        // Ignora páginas de capa/edital antes da lista de inscritos
-        if (!/LISTA DE INSCRITOS/i.test(pageText) && !regexQtd.test(pageText)) {
+        // Ignora as páginas iniciais do edital antes da lista de inscritos
+        if (!/LISTA DE INSCRITOS/i.test(pageText)) {
           continue;
         }
 
-        // Atualiza o período se aparecer nesta página
+        // Detecta o Período na página (ex: 1º Período, 2º Período...)
         const matchPer = pageText.match(regexPeriodo);
         if (matchPer) {
-          ultimoPeriodoVisto = `${matchPer[1].replace(/°/g, 'º')} Período`;
+          const chavePer = `${matchPer[1].replace(/°/g, 'º')} Período`;
+          periodoCorrente = infoPeriodos[chavePer] || chavePer;
         }
 
-        // Identifica qual escola oficial está escrita nesta página (mesmo se houver quebra de linha ou falta de hífen)
-        let escolaEncontradaNaPagina = "";
-        for (const esc of escolasDoEdital) {
-          // Cria uma busca flexível que aceita "EM" ou "E.M." e espaços variados
-          const padraoFlex = esc
-            .replace(/^E\.?M\.?\s+/i, 'E\\.?M\\.?\\s+')
-            .replace(/^E\.?E\.?\s+/i, 'E\\.?E\\.?\\s+')
-            .replace(/\s+/g, '\\s+');
-          if (new RegExp(padraoFlex, 'i').test(pageText)) {
-            escolaEncontradaNaPagina = esc;
-            break;
+        // Detecta a Escola presente na página (resiliente a quebras de linha e variações EM / E.M.)
+        if (/Paulo\s+Freire/i.test(pageText)) {
+          escolaCorrente = "EM Professor Paulo Freire";
+        } else if (/Valdelice/i.test(pageText)) {
+          escolaCorrente = "EM Professora Valdelice Aparecida Medeiros Prass";
+        } else if (/Elza\s+Marreiro/i.test(pageText)) {
+          escolaCorrente = "EM Elza Marreiro Medina";
+        } else if (/Paulo\s+Chagas/i.test(pageText)) {
+          escolaCorrente = "EE Engenheiro Paulo Chagas Nogueira";
+        } else {
+          // Fallback genérico para qualquer outra escola INEPAM em outros editais
+          const matchOutroLocal = pageText.match(/\d+[º°]\s*Per[íi]odo\s*[-–]?\s*([A-ZÀ-Ú0-9\s\.\-\/]{6,70}?)\s*[-–]?\s*SALA\s*\d+/i);
+          if (matchOutroLocal) {
+            escolaCorrente = matchOutroLocal[1].replace(/Local\/Sala/gi, '').replace(/^[-–\s]+|[-–\s]+$/g, '').trim();
           }
         }
 
-        // Se não achou pela lista do edital, tenta extrair pelo cabeçalho da sala na página
-        if (!escolaEncontradaNaPagina) {
-          const matchFb = pageText.match(regexFallbackEscola);
-          if (matchFb) {
-            escolaEncontradaNaPagina = matchFb[1].replace(/Local\/Sala/gi, '').trim();
+        // Conta quantos números de inscrição de candidatos (ex: 0368246) existem nesta página
+        const inscricoesNaPagina = pageText.match(regexInscricoes);
+        if (inscricoesNaPagina && inscricoesNaPagina.length > 0 && escolaCorrente && periodoCorrente) {
+          const chave = `${escolaCorrente.toUpperCase()}___${periodoCorrente}`;
+          if (!contagem[chave]) {
+            contagem[chave] = {
+              local: escolaCorrente,
+              periodo: periodoCorrente,
+              total: 0
+            };
           }
-        }
-
-        if (escolaEncontradaNaPagina) {
-          ultimaEscolaVista = escolaEncontradaNaPagina;
-        }
-
-        // Quando encontra "Qtd. Candidatos: XX", soma na escola e período daquela exata sala!
-        const matchQtd = pageText.match(regexQtd);
-        if (matchQtd && ultimaEscolaVista) {
-          const qtd = parseInt(matchQtd[1], 10);
-          if (qtd > 0) {
-            const chave = `${ultimaEscolaVista.toUpperCase()}___${ultimoPeriodoVisto}`;
-            if (!contagem[chave]) {
-              contagem[chave] = {
-                local: ultimaEscolaVista,
-                periodo: ultimoPeriodoVisto,
-                total: 0
-              };
-            }
-            contagem[chave].total += qtd;
-          }
+          contagem[chave].total += inscricoesNaPagina.length;
         }
 
         if (i % 10 === 0 || i === totalPages) {
@@ -524,7 +509,11 @@
         }
       }
 
-      return Object.values(contagem).sort((a, b) => b.total - a.total);
+      // Ordena por período (1º, 2º, 3º...) e depois por maior número de alunos
+      return Object.values(contagem).sort((a, b) => {
+        if (a.periodo !== b.periodo) return a.periodo.localeCompare(b.periodo);
+        return b.total - a.total;
+      });
     }
 
     function atualizarSelectPeriodos() {
@@ -594,7 +583,7 @@
 
       let csv = "\uFEFFPosição;Período;Escola / Faculdade / Bloco;Total de Alunos\n";
       dados.forEach((item, i) => {
-        csv += `${i + 1};${item.periodo};"${item.local.replace(/"/g, '""')}";${item.total}\n`;
+        csv += `${i + 1};"${item.periodo}";"${item.local.replace(/"/g, '""')}";${item.total}\n`;
       });
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -658,9 +647,9 @@
         },
         columnStyles: {
           0: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
-          1: { cellWidth: 24, halign: 'center' },
+          1: { cellWidth: 38, halign: 'center' },
           2: { cellWidth: 'auto' },
-          3: { cellWidth: 24, halign: 'right', fontStyle: 'bold' }
+          3: { cellWidth: 22, halign: 'right', fontStyle: 'bold' }
         },
         didDrawPage: function (data) {
           const pageCount = doc.internal.getNumberOfPages();
