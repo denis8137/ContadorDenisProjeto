@@ -25,6 +25,7 @@
       --success: #10b981;
       --danger: #e11d48;
       --gold: #f59e0b;
+      --purple: #8b5cf6;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -71,6 +72,38 @@
 
     .results-area { display: none; margin-top: 32px; }
     
+    /* Barra de Alternância de Método */
+    .method-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0b0f19;
+      padding: 14px 18px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .method-info { font-size: 0.88rem; color: #cbd5e1; }
+    .method-info strong { color: var(--accent); }
+    .method-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+    
+    .btn-method {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: 1px solid var(--border);
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-method:hover { border-color: var(--accent); color: #fff; }
+    .btn-method.active-m1 { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn-method.active-m2 { background: var(--purple); color: #fff; border-color: var(--purple); }
+
     .filter-panel {
       display: flex;
       flex-wrap: wrap;
@@ -111,6 +144,7 @@
     .badge-manha { background: #1e3a5f; color: #60a5fa; }
     .badge-tarde { background: #3b2d18; color: #fbbf24; }
     .badge-geral { background: #243049; color: #cbd5e1; }
+    .badge-periodo-num { background: #2e1065; color: #c4b5fd; }
     .total-col { font-weight: 800; font-size: 1.15rem; color: var(--accent); text-align: right; }
     th.right { text-align: right; }
     .empty-row { text-align: center; color: var(--subtext); padding: 35px; }
@@ -143,19 +177,29 @@
 
     <!-- Tabela e Filtros -->
     <div class="results-area" id="resultsArea">
+      
+      <!-- Seletor de Método de Leitura -->
+      <div class="method-bar">
+        <div class="method-info" id="methodStatusText">
+          Modo ativo: <strong>Pesquisa Normal (Padrão Linha a Linha)</strong>
+        </div>
+        <div class="method-buttons">
+          <button type="button" class="btn-method active-m1" id="btnMetodo1">Pesquisa Normal</button>
+          <button type="button" class="btn-method" id="btnMetodo2">⚡ Pesquisa Método 2 (INEPAM / Blocos de Sala)</button>
+        </div>
+      </div>
+
       <div class="filter-panel">
         <div class="filter-group">
           <label for="filtroPeriodo">Período</label>
           <select id="filtroPeriodo">
             <option value="TODOS">Todos os Períodos</option>
-            <option value="Manhã">Manhã</option>
-            <option value="Tarde">Tarde</option>
           </select>
         </div>
 
         <div class="filter-group" style="flex: 2;">
           <label for="filtroBusca">Pesquisar por Escola ou Bloco</label>
-          <input type="text" id="filtroBusca" placeholder="Ex: Maria Expedita, Unip, Bloco 7...">
+          <input type="text" id="filtroBusca" placeholder="Ex: Paulo Freire, Valdelice, Maria Expedita, Unip...">
         </div>
       </div>
 
@@ -202,9 +246,15 @@
     const exportPdfBtn = document.getElementById('exportPdfBtn');
     const filtroPeriodo = document.getElementById('filtroPeriodo');
     const filtroBusca = document.getElementById('filtroBusca');
+    
+    const btnMetodo1 = document.getElementById('btnMetodo1');
+    const btnMetodo2 = document.getElementById('btnMetodo2');
+    const methodStatusText = document.getElementById('methodStatusText');
 
     let dadosGerais = [];
     let nomeArquivoAtual = "";
+    let pdfBytesEmMemoria = null; // Guarda o PDF carregado para trocar entre Método 1 e Método 2 instantaneamente
+    let metodoAtual = 1;
 
     btnClick.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -226,14 +276,24 @@
       e.preventDefault();
       cardUpload.style.borderColor = 'var(--border)';
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        processarArquivo(e.dataTransfer.files[0]);
+        carregarNovoArquivo(e.dataTransfer.files[0]);
       }
     });
 
     pdfFileInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files.length > 0) {
-        processarArquivo(e.target.files[0]);
+        carregarNovoArquivo(e.target.files[0]);
       }
+    });
+
+    btnMetodo1.addEventListener('click', () => {
+      if (!pdfBytesEmMemoria) return;
+      executarProcessamento(1);
+    });
+
+    btnMetodo2.addEventListener('click', () => {
+      if (!pdfBytesEmMemoria) return;
+      executarProcessamento(2);
     });
 
     function normalizar(str) {
@@ -253,19 +313,37 @@
         .trim();
     }
 
-    async function processarArquivo(file) {
+    async function carregarNovoArquivo(file) {
       nomeArquivoAtual = file.name.replace(/\.pdf$/i, '');
       fileNameDisplay.innerText = `${file.name} (${(file.size / (1024*1024)).toFixed(1)} MB)`;
+      pdfBytesEmMemoria = await file.arrayBuffer();
+      executarProcessamento(1); // Inicia sempre com a pesquisa normal
+    }
+
+    async function executarProcessamento(metodo) {
+      metodoAtual = metodo;
+      
+      // Atualiza visual dos botões de método
+      if (metodo === 1) {
+        btnMetodo1.className = "btn-method active-m1";
+        btnMetodo2.className = "btn-method";
+        methodStatusText.innerHTML = 'Modo ativo: <strong>Pesquisa Normal (Padrão Linha a Linha)</strong>';
+      } else {
+        btnMetodo1.className = "btn-method";
+        btnMetodo2.className = "btn-method active-m2";
+        methodStatusText.innerHTML = 'Modo ativo: <strong>Pesquisa Método 2 (INEPAM / Blocos de Sala)</strong>';
+      }
+
       progressBox.style.display = "block";
-      resultsArea.style.display = "none";
       progressBar.style.width = "0%";
       percentLabel.innerText = "0%";
-      statusLabel.innerText = "Carregando PDF...";
+      statusLabel.innerText = metodo === 1 ? "Executando Pesquisa Normal..." : "Executando Pesquisa Método 2...";
 
       try {
-        const arrayBuffer = await file.arrayBuffer();
+        // Faz uma cópia do ArrayBuffer pois o PDF.js pode transferir/consumir o buffer original
+        const bufferCopia = pdfBytesEmMemoria.slice(0);
         const loadingTask = pdfjsLib.getDocument({
-          data: arrayBuffer,
+          data: bufferCopia,
           cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
           cMapPacked: true,
         });
@@ -273,70 +351,157 @@
         const pdf = await loadingTask.promise;
         const totalPages = pdf.numPages;
 
-        const contagem = {};
-
-        // Captura toda a linha de ensalamento até a sala para garantir a leitura completa antes de consolidar
-        const regexCompleta = /(?:(?:[MT\d]{1,4}\s*[-–]\s*|(?:EE|E\.E\.|EMEF|E\.M\.E\.F\.|UME|U\.M\.E\.|COLÉGIO|COLEGIO|FACULDADE|UNIVERSIDADE|UNIP|UNISANTA|UNISANTOS|UNIMONTE|UNIFESP|ESAMC|UNIMES|CAMPUS)\b)[^,\n\r]+?\s*SALA\s*[A-Z0-9\.\-]+)/gi;
-
-        for (let i = 1; i <= totalPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          let pageText = normalizar(content.items.map(it => it.str).join(' '));
-
-          let match;
-          while ((match = regexCompleta.exec(pageText)) !== null) {
-            let linhaBruta = match[0].trim();
-
-            // 1. Identifica o período
-            let periodo = "Geral";
-            if (/MANHÃ|\bM\b|\bM-?\d{2,4}\b/i.test(linhaBruta)) {
-              periodo = "Manhã";
-            } else if (/TARDE|\bT\b|\bT-?\d{2,4}\b/i.test(linhaBruta)) {
-              periodo = "Tarde";
-            }
-
-            // 2. Consolida por Escola/Bloco removendo sufixos de período, andar e sala
-            // Ex: "M-130 - E.E. PROFESSORA MARIA EXPEDITA SILVA - M 1º ANDAR - SALA 02"
-            // vira -> "M-130 - E.E. PROFESSORA MARIA EXPEDITA SILVA"
-            let escolaConsolidada = linhaBruta
-              .replace(/\s*[-–]\s*(?:MANHÃ|TARDE|[MT])\s*(?:\d+\s*[º°]?\s*)?(?:ANDAR\s*)?[-–]?\s*SALA\s*.*$/i, '')
-              .replace(/\s+(?:MANHÃ|TARDE|[MT])\s*(?:\d+\s*[º°]?\s*)?(?:ANDAR\s*)?[-–]?\s*SALA\s*.*$/i, '')
-              .replace(/\s*[-–]?\s*(?:\d+\s*[º°]?\s*ANDAR|TÉRREO|TERREO)\s*[-–]?\s*SALA\s*.*$/i, '')
-              .replace(/\s*[-–]?\s*SALA\s*.*$/i, '')
-              .replace(/\s*[-–]\s*(?:MANHÃ|TARDE)\s*\d*.*$/i, '')
-              .replace(/\s*[-–]\s*[MT]\s*$/i, '')
-              .replace(/\s*-\s*/g, ' - ')
-              .replace(/[-–\s]+$/, '')
-              .replace(/\s+/g, ' ')
-              .trim();
-
-            if (escolaConsolidada.length > 6 && !/LOCAL\s*(?:DA|DE)?\s*PROVA/i.test(escolaConsolidada) && !/EDITAL/i.test(escolaConsolidada)) {
-              const chave = `${escolaConsolidada.toUpperCase()}___${periodo}`;
-              if (!contagem[chave]) {
-                contagem[chave] = { local: escolaConsolidada, periodo: periodo, total: 0 };
-              }
-              contagem[chave].total++;
-            }
-          }
-
-          if (i % 8 === 0 || i === totalPages) {
-            const pct = Math.round((i / totalPages) * 100);
-            progressBar.style.width = pct + "%";
-            percentLabel.innerText = pct + "%";
-            statusLabel.innerText = `Processando página ${i} de ${totalPages}...`;
-            await new Promise(r => setTimeout(r, 0));
-          }
+        if (metodo === 1) {
+          dadosGerais = await processarMetodo1(pdf, totalPages);
+        } else {
+          dadosGerais = await processarMetodo2(pdf, totalPages);
         }
 
-        dadosGerais = Object.values(contagem).sort((a, b) => b.total - a.total);
+        atualizarSelectPeriodos();
         aplicarFiltroERenderizar();
 
       } catch (err) {
         console.error("Erro no processamento:", err);
-        alert("Ocorreu um erro ao carregar o arquivo PDF.");
+        alert("Ocorreu um erro ao processar o arquivo PDF.");
       } finally {
         statusLabel.innerText = "Concluído com sucesso!";
       }
+    }
+
+    // =========================================================================
+    // MÉTODO 1: PESQUISA NORMAL (Padrão original linha a linha por candidato)
+    // =========================================================================
+    async function processarMetodo1(pdf, totalPages) {
+      const contagem = {};
+      const regexCompleta = /(?:(?:[MT\d]{1,4}\s*[-–]\s*|(?:EE|E\.E\.|EMEF|E\.M\.E\.F\.|UME|U\.M\.E\.|COLÉGIO|COLEGIO|FACULDADE|UNIVERSIDADE|UNIP|UNISANTA|UNISANTOS|UNIMONTE|UNIFESP|ESAMC|UNIMES|CAMPUS)\b)[^,\n\r]+?\s*SALA\s*[A-Z0-9\.\-]+)/gi;
+
+      for (let i = 1; i <= totalPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        let pageText = normalizar(content.items.map(it => it.str).join(' '));
+
+        let match;
+        while ((match = regexCompleta.exec(pageText)) !== null) {
+          let linhaBruta = match[0].trim();
+
+          let periodo = "Geral";
+          if (/MANHÃ|\bM\b|\bM-?\d{2,4}\b/i.test(linhaBruta)) {
+            periodo = "Manhã";
+          } else if (/TARDE|\bT\b|\bT-?\d{2,4}\b/i.test(linhaBruta)) {
+            periodo = "Tarde";
+          }
+
+          let escolaConsolidada = linhaBruta
+            .replace(/\s*[-–]\s*(?:MANHÃ|TARDE|[MT])\s*(?:\d+\s*[º°]?\s*)?(?:ANDAR\s*)?[-–]?\s*SALA\s*.*$/i, '')
+            .replace(/\s+(?:MANHÃ|TARDE|[MT])\s*(?:\d+\s*[º°]?\s*)?(?:ANDAR\s*)?[-–]?\s*SALA\s*.*$/i, '')
+            .replace(/\s*[-–]?\s*(?:\d+\s*[º°]?\s*ANDAR|TÉRREO|TERREO)\s*[-–]?\s*SALA\s*.*$/i, '')
+            .replace(/\s*[-–]?\s*SALA\s*.*$/i, '')
+            .replace(/\s*[-–]\s*(?:MANHÃ|TARDE)\s*\d*.*$/i, '')
+            .replace(/\s*[-–]\s*[MT]\s*$/i, '')
+            .replace(/\s*-\s*/g, ' - ')
+            .replace(/[-–\s]+$/, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          if (escolaConsolidada.length > 6 && !/LOCAL\s*(?:DA|DE)?\s*PROVA/i.test(escolaConsolidada) && !/EDITAL/i.test(escolaConsolidada)) {
+            const chave = `${escolaConsolidada.toUpperCase()}___${periodo}`;
+            if (!contagem[chave]) {
+              contagem[chave] = { local: escolaConsolidada, periodo: periodo, total: 0 };
+            }
+            contagem[chave].total++;
+          }
+        }
+
+        if (i % 10 === 0 || i === totalPages) {
+          const pct = Math.round((i / totalPages) * 100);
+          progressBar.style.width = pct + "%";
+          percentLabel.innerText = pct + "%";
+          statusLabel.innerText = `Método 1: página ${i} de ${totalPages}...`;
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      return Object.values(contagem).sort((a, b) => b.total - a.total);
+    }
+
+    // =========================================================================
+    // MÉTODO 2: PADRÃO INEPAM / BLOCOS DE SALA (Ex: "1º Período EM... - SALA 01" + "Qtd. Candidatos: 36")
+    // =========================================================================
+    async function processarMetodo2(pdf, totalPages) {
+      const contagem = {};
+      const salasContabilizadas = new Set(); // Evita contar a mesma sala duas vezes caso o cabeçalho repita na continuação da página
+
+      // Captura cabeçalho do bloco: "1º Período - EM Professor Paulo Freire - SALA 01" (ou sem hífen)
+      const regexCabecalhoSala = /(\d+[º°]\s*Per[íi]odo)\s*[-–]?\s*([A-ZÀ-Ú0-9\s\.\-\/]+?)\s*[-–]?\s*SALA\s*(\d+[A-Z]?)/i;
+      // Captura o totalizador oficial do fim da sala: "Qtd. Candidatos: 36"
+      const regexQtdCandidatos = /Qtd\.?\s*Candidatos\s*:\s*(\d+)/i;
+
+      let periodoAtual = "";
+      let escolaAtual = "";
+      let salaAtual = "";
+
+      for (let i = 1; i <= totalPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        let pageText = normalizar(content.items.map(it => it.str).join(' '));
+
+        // 1. Verifica se nesta página existe a identificação de Período + Escola + Sala
+        const matchSala = pageText.match(regexCabecalhoSala);
+        if (matchSala) {
+          periodoAtual = matchSala[1].replace(/°/g, 'º').trim();
+          // Padroniza capitalização de "Período"
+          periodoAtual = periodoAtual.replace(/per[íi]odo/i, 'Período');
+          
+          escolaAtual = matchSala[2]
+            .replace(/Local\/Sala/gi, '')
+            .replace(/^[-–\s]+|[-–\s]+$/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          salaAtual = matchSala[3].trim();
+        }
+
+        // 2. Verifica se nesta página existe o fechamento "Qtd. Candidatos: XX"
+        const matchQtd = pageText.match(regexQtdCandidatos);
+        if (matchQtd && escolaAtual && salaAtual) {
+          const qtd = parseInt(matchQtd[1], 10);
+          const idUnicoSala = `${periodoAtual}___${escolaAtual.toUpperCase()}___SALA_${salaAtual}`;
+
+          if (!salasContabilizadas.has(idUnicoSala) && qtd > 0) {
+            salasContabilizadas.add(idUnicoSala);
+
+            const chaveEscola = `${escolaAtual.toUpperCase()}___${periodoAtual}`;
+            if (!contagem[chaveEscola]) {
+              contagem[chaveEscola] = {
+                local: escolaAtual,
+                periodo: periodoAtual,
+                total: 0
+              };
+            }
+            contagem[chaveEscola].total += qtd;
+          }
+        }
+
+        if (i % 10 === 0 || i === totalPages) {
+          const pct = Math.round((i / totalPages) * 100);
+          progressBar.style.width = pct + "%";
+          percentLabel.innerText = pct + "%";
+          statusLabel.innerText = `Método 2: página ${i} de ${totalPages}...`;
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      return Object.values(contagem).sort((a, b) => b.total - a.total);
+    }
+
+    function atualizarSelectPeriodos() {
+      const periodosUnicos = [...new Set(dadosGerais.map(d => d.periodo))];
+      filtroPeriodo.innerHTML = '<option value="TODOS">Todos os Períodos</option>';
+      periodosUnicos.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.innerText = p;
+        filtroPeriodo.appendChild(opt);
+      });
     }
 
     filtroPeriodo.addEventListener('change', aplicarFiltroERenderizar);
@@ -358,7 +523,10 @@
       let total = 0;
 
       if (dados.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="4" class="empty-row">Nenhuma escola reconhecida. Verifique se o documento possui texto selecionável.</td></tr>`;
+        const msgExtra = metodoAtual === 1 
+          ? 'Nenhuma escola reconhecida no Modo Normal. Experimente clicar em <strong>"⚡ Pesquisa Método 2"</strong> acima.' 
+          : 'Nenhuma escola encontrada no Método 2. Tente voltar para a <strong>"Pesquisa Normal"</strong>.';
+        tableBody.innerHTML = `<tr><td colspan="4" class="empty-row">${msgExtra}</td></tr>`;
         totalResumo.innerText = "0 escolas";
         resultsArea.style.display = "block";
         return;
@@ -366,7 +534,10 @@
 
       dados.forEach((item, index) => {
         total += item.total;
-        const badgeClass = item.periodo === "Manhã" ? "badge-manha" : (item.periodo === "Tarde" ? "badge-tarde" : "badge-geral");
+        let badgeClass = "badge-geral";
+        if (item.periodo === "Manhã") badgeClass = "badge-manha";
+        else if (item.periodo === "Tarde") badgeClass = "badge-tarde";
+        else if (/Período/i.test(item.periodo)) badgeClass = "badge-periodo-num";
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -378,7 +549,7 @@
         tableBody.appendChild(tr);
       });
 
-      totalResumo.innerText = `Total: ${total.toLocaleString('pt-BR')} alunos distribuídos em ${dados.length} escolas/blocos`;
+      totalResumo.innerText = `Total: ${total.toLocaleString('pt-BR')} alunos distribuídos em ${dados.length} escolas/períodos`;
       resultsArea.style.display = "block";
     }
 
@@ -422,7 +593,7 @@
       doc.setTextColor(100, 116, 139);
       doc.text(`Arquivo base: ${nomeArquivoAtual || 'Documento PDF'}`, 14, 24);
       doc.text(`Período: ${periodoTexto}${buscaTexto}`, 14, 29);
-      doc.text(`Total: ${totalAlunos.toLocaleString('pt-BR')} alunos em ${dados.length} escolas/blocos`, 14, 34);
+      doc.text(`Total: ${totalAlunos.toLocaleString('pt-BR')} alunos em ${dados.length} escolas/períodos`, 14, 34);
 
       const linhasTabela = dados.map((item, idx) => [
         `#${idx + 1}`,
@@ -453,7 +624,7 @@
         },
         columnStyles: {
           0: { cellWidth: 14, halign: 'center', fontStyle: 'bold' },
-          1: { cellWidth: 20, halign: 'center' },
+          1: { cellWidth: 24, halign: 'center' },
           2: { cellWidth: 'auto' },
           3: { cellWidth: 24, halign: 'right', fontStyle: 'bold' }
         },
